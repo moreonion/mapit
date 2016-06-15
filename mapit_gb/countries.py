@@ -1,3 +1,4 @@
+from functools import partial
 import re
 
 from django.core.urlresolvers import reverse, NoReverseMatch
@@ -45,70 +46,62 @@ def canonical_postcode(pc):
     return pc
 
 
+SPECIAL_POSTCODES = (
+    'ASCN1ZZ',  # Ascension Island
+    'BBND1ZZ',  # BIOT
+    'BIQQ1ZZ',  # British Antarctic Territory
+    'FIQQ1ZZ',  # Falkland Islands
+    'PCRN1ZZ',  # Pitcairn Islands
+    'SIQQ1ZZ',  # South Georgia and the South Sandwich Islands
+    'STHL1ZZ',  # St Helena
+    'TDCU1ZZ',  # Tristan da Cunha
+    'TKCA1ZZ',  # Turks and Caicos Islands
+    'GIR0AA', 'G1R0AA',  # Girobank
+    'SANTA1', 'XM45HQ',  # Santa Claus
+)
+
+
 def is_special_postcode(pc):
-    if pc in (
-        'ASCN1ZZ',  # Ascension Island
-        'BBND1ZZ',  # BIOT
-        'BIQQ1ZZ',  # British Antarctic Territory
-        'FIQQ1ZZ',  # Falkland Islands
-        'PCRN1ZZ',  # Pitcairn Islands
-        'SIQQ1ZZ',  # South Georgia and the South Sandwich Islands
-        'STHL1ZZ',  # St Helena
-        'TDCU1ZZ',  # Tristan da Cunha
-        'TKCA1ZZ',  # Turks and Caicos Islands
-        'GIR0AA', 'G1R0AA',  # Girobank
-        'SANTA1', 'XM45HQ',  # Santa Claus
-    ):
+    return pc in SPECIAL_POSTCODES
+
+
+PARTS = {
+    'fst': 'ABCDEFGHIJKLMNOPRSTUWYZ',
+    'sec': 'ABCDEFGHKLMNOPQRSTUVWXY',
+    'thd': 'ABCDEFGHJKPSTUW',
+    'fth': 'ABEHMNPRVWXY',
+    'inward': 'ABDEFGHJLNPQRSTUWXYZ',
+}
+
+FULL_MATCH_REGEX = re.compile('|'.join([r.format(**PARTS) for r in (
+    '^[{fst}][1-9]\d[{inward}][{inward}]$',
+    '^[{fst}][1-9]\d\d[{inward}][{inward}]$',
+    '^[{fst}][{sec}]\d\d[{inward}][{inward}]$',
+    '^[{fst}][{sec}][1-9]\d\d[{inward}][{inward}]$',
+    '^[{fst}][1-9][{thd}]\d[{inward}][{inward}]$',
+    '^[{fst}][{sec}][1-9][{fth}]\d[{inward}][{inward}]$',
+)]))
+
+PARTIAL_MATCH_REGEX = re.compile('|'.join([r.format(**PARTS) for r in (
+    '^[{fst}][1-9]$',
+    '^[{fst}][1-9]\d$',
+    '^[{fst}][{sec}]\d$',
+    '^[{fst}][{sec}][1-9]\d$',
+    '^[{fst}][1-9][{thd}]$',
+    '^[{fst}][{sec}][1-9][{fth}]$',
+)]))
+
+del PARTS
+
+
+def _match_postcode(regex, extra_postcodes, pc):
+    if pc in extra_postcodes:
         return True
-    return False
+    return regex.match(pc) is not None
 
 
-def is_valid_postcode(pc):
-    # Our test postcode
-    if pc in ('ZZ99ZZ', 'ZZ99ZY'):
-        return True
-
-    if is_special_postcode(pc):
-        return True
-
-    # See http://www.govtalk.gov.uk/gdsc/html/noframes/PostCode-2-1-Release.htm
-    inward = 'ABDEFGHJLNPQRSTUWXYZ'
-    fst = 'ABCDEFGHIJKLMNOPRSTUWYZ'
-    sec = 'ABCDEFGHJKLMNOPQRSTUVWXY'
-    thd = 'ABCDEFGHJKSTUW'
-    fth = 'ABEHMNPRVWXY'
-
-    if re.match('[%s][1-9]\d[%s][%s]$' % (fst, inward, inward), pc) or \
-        re.match('[%s][1-9]\d\d[%s][%s]$' % (fst, inward, inward), pc) or \
-        re.match('[%s][%s]\d\d[%s][%s]$' % (fst, sec, inward, inward), pc) or \
-        re.match('[%s][%s][1-9]\d\d[%s][%s]$' % (fst, sec, inward, inward), pc) or \
-        re.match('[%s][1-9][%s]\d[%s][%s]$' % (fst, thd, inward, inward), pc) or \
-            re.match('[%s][%s][1-9][%s]\d[%s][%s]$' % (fst, sec, fth, inward, inward), pc):
-        return True
-
-    return False
-
-
-def is_valid_partial_postcode(pc):
-    # Our test postcode
-    if pc == 'ZZ9':
-        return True
-
-    # See http://www.govtalk.gov.uk/gdsc/html/noframes/PostCode-2-1-Release.htm
-    fst = 'ABCDEFGHIJKLMNOPRSTUWYZ'
-    sec = 'ABCDEFGHJKLMNOPQRSTUVWXY'
-    thd = 'ABCDEFGHJKSTUW'
-    fth = 'ABEHMNPRVWXY'
-
-    if re.match('[%s][1-9]$' % (fst), pc) or \
-        re.match('[%s][1-9]\d$' % (fst), pc) or \
-        re.match('[%s][%s]\d$' % (fst, sec), pc) or \
-        re.match('[%s][%s][1-9]\d$' % (fst, sec), pc) or \
-        re.match('[%s][1-9][%s]$' % (fst, thd), pc) or \
-            re.match('[%s][%s][1-9][%s]$' % (fst, sec, fth), pc):
-        return True
-
-    return False
+is_valid_postcode = partial(_match_postcode, FULL_MATCH_REGEX, SPECIAL_POSTCODES + ('ZZ99ZZ', 'ZZ99ZY'))
+is_valid_partial_postcode = partial(_match_postcode, PARTIAL_MATCH_REGEX, ('ZZ9',))
 
 
 def get_postcode_display(pc):
