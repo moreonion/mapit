@@ -1,8 +1,8 @@
-from functools import partial
 import re
 
 from django.core.urlresolvers import reverse, NoReverseMatch
 from django.http import HttpResponseRedirect
+from ukpostcodeutils import validation
 
 from mapit.shortcuts import get_object_or_404
 
@@ -65,43 +65,12 @@ def is_special_postcode(pc):
     return pc in SPECIAL_POSTCODES
 
 
-PARTS = {
-    'fst': 'ABCDEFGHIJKLMNOPRSTUWYZ',
-    'sec': 'ABCDEFGHKLMNOPQRSTUVWXY',
-    'thd': 'ABCDEFGHJKPSTUW',
-    'fth': 'ABEHMNPRVWXY',
-    'inward': 'ABDEFGHJLNPQRSTUWXYZ',
-}
-
-FULL_MATCH_REGEX = re.compile('|'.join([r.format(**PARTS) for r in (
-    '^[{fst}][1-9]\d[{inward}][{inward}]$',
-    '^[{fst}][1-9]\d\d[{inward}][{inward}]$',
-    '^[{fst}][{sec}]\d\d[{inward}][{inward}]$',
-    '^[{fst}][{sec}][1-9]\d\d[{inward}][{inward}]$',
-    '^[{fst}][1-9][{thd}]\d[{inward}][{inward}]$',
-    '^[{fst}][{sec}][1-9][{fth}]\d[{inward}][{inward}]$',
-)]))
-
-PARTIAL_MATCH_REGEX = re.compile('|'.join([r.format(**PARTS) for r in (
-    '^[{fst}][1-9]$',
-    '^[{fst}][1-9]\d$',
-    '^[{fst}][{sec}]\d$',
-    '^[{fst}][{sec}][1-9]\d$',
-    '^[{fst}][1-9][{thd}]$',
-    '^[{fst}][{sec}][1-9][{fth}]$',
-)]))
-
-del PARTS
+def is_valid_postcode(pc):
+    return validation.is_valid_postcode(pc, SPECIAL_POSTCODES + ('ZZ99ZZ', 'ZZ99ZY'))
 
 
-def _match_postcode(regex, extra_postcodes, pc):
-    if pc in extra_postcodes:
-        return True
-    return regex.match(pc) is not None
-
-
-is_valid_postcode = partial(_match_postcode, FULL_MATCH_REGEX, SPECIAL_POSTCODES + ('ZZ99ZZ', 'ZZ99ZY'))
-is_valid_partial_postcode = partial(_match_postcode, PARTIAL_MATCH_REGEX, ('ZZ9',))
+def is_valid_partial_postcode(pc):
+    return validation.is_valid_partial_postcode(pc, ('ZZ9',))
 
 
 def get_postcode_display(pc):
